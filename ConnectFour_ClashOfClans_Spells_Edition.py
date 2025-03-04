@@ -7,8 +7,8 @@ WIDTH, HEIGHT = 700, 750  # Increased height for spell menu
 GRID_SIZE = 100
 ROWS, COLS = 6, 7
 PLAYER_COLORS = {"X": (255, 0, 0), "O": (0, 0, 255)}  # Red and Blue
-SPELLS = ["Lightning", "Freeze", "Heal", "Jump", "Earthquake"]  # Shortened names for icons
-SPELL_COLORS = {"Lightning": (255, 255, 0), "Freeze": (0, 255, 255), "Heal": (0, 255, 0), 
+SPELLS = ["Lightning", "Freeze", "Jump", "Earthquake"]  # Removed Heal spell
+SPELL_COLORS = {"Lightning": (255, 255, 0), "Freeze": (0, 255, 255), 
                 "Jump": (255, 165, 0), "Earthquake": (139, 69, 19)}
 
 # Initialize Pygame
@@ -20,21 +20,29 @@ clock = pygame.time.Clock()
 
 # Load sound effects (only for token drop)
 pygame.mixer.init()
-drop_sound = pygame.mixer.Sound("drop.mp3")  # Add a sound file for token drop
+drop_sound = pygame.mixer.Sound("drop.wav")  # Ensure this is a .wav file
 
 # Create the board
 def create_board():
     return [[None for _ in range(COLS)] for _ in range(ROWS)]
 
 # Draw the board
-def draw_board(board):
+def draw_board(board, frozen_columns):
     screen.fill((0, 0, 0))  # Black background
     for row in range(ROWS):
         for col in range(COLS):
+            # Draw the grid and tokens
             pygame.draw.rect(screen, (0, 0, 255), (col * GRID_SIZE, row * GRID_SIZE, GRID_SIZE, GRID_SIZE), 2)
             if board[row][col]:
                 pygame.draw.circle(screen, PLAYER_COLORS[board[row][col]], 
                                  (col * GRID_SIZE + GRID_SIZE // 2, row * GRID_SIZE + GRID_SIZE // 2), GRID_SIZE // 2 - 5)
+    # Draw frozen columns with a blue overlay
+    for col in frozen_columns:
+        if frozen_columns[col] > 0:
+            freeze_overlay = pygame.Surface((GRID_SIZE, GRID_SIZE * ROWS))
+            freeze_overlay.set_alpha(128)  # Semi-transparent
+            freeze_overlay.fill((0, 255, 255))
+            screen.blit(freeze_overlay, (col * GRID_SIZE, 0))
 
 # Draw spell menu
 def draw_spell_menu(player, spells, selected_spell):
@@ -47,12 +55,17 @@ def draw_spell_menu(player, spells, selected_spell):
         count_text = font.render(f"{spells[player][spell]}", True, color)
         screen.blit(count_text, (20 + i * 130, y_offset + 50))
 
+# Draw current player's turn
+def draw_turn_indicator(player):
+    turn_text = font.render(f"Player {player}'s Turn", True, PLAYER_COLORS[player])
+    screen.blit(turn_text, (20, 10))
+
 # Drop token animation
-def drop_token_animation(board, col, player):
+def drop_token_animation(board, col, player, frozen_columns):
     for row in range(ROWS):
         if board[row][col] is None:
             board[row][col] = player
-            draw_board(board)
+            draw_board(board, frozen_columns)
             pygame.display.flip()
             drop_sound.play()  # Play drop sound
             pygame.time.wait(100)  # Animation delay
@@ -61,7 +74,7 @@ def drop_token_animation(board, col, player):
     return True
 
 # Spell effects
-def cast_lightning(board, col):
+def cast_lightning(board, col, frozen_columns):
     for row in range(ROWS):
         if board[row][col] is not None:
             board[row][col] = None
@@ -86,24 +99,22 @@ def cast_freeze(board, col, frozen_columns):
     pygame.display.flip()
     pygame.time.wait(200)  # Overlay duration
 
-def cast_heal(board, row, col):
-    if board[row][col] is not None:
-        board[row][col] = f"H{board[row][col]}"  # Mark as healed
-    # Heal animation (green glow)
-    pygame.draw.circle(screen, (0, 255, 0), 
-                      (col * GRID_SIZE + GRID_SIZE // 2, row * GRID_SIZE + GRID_SIZE // 2), GRID_SIZE // 2 - 5, 5)
-    pygame.display.flip()
-    pygame.time.wait(200)  # Glow duration
+def cast_jump(board, col, frozen_columns):
+    target_col = col - 2  # Move 2 columns to the left
+    if target_col >= 0:  # Ensure the target column is within bounds
+        for row in range(ROWS):
+            board[row][col], board[row][target_col] = board[row][target_col], board[row][col]
+        # Jump animation (quick swap)
+        draw_board(board, frozen_columns)
+        pygame.display.flip()
+        pygame.time.wait(200)  # Swap duration
+    else:
+        error_text = font.render("Error: Cannot jump beyond the board!", True, (255, 0, 0))
+        screen.blit(error_text, (20, HEIGHT - 150))
+        pygame.display.flip()
+        pygame.time.wait(1000)  # Display error for 1 second
 
-def cast_jump(board, col1, col2):
-    for row in range(ROWS):
-        board[row][col1], board[row][col2] = board[row][col2], board[row][col1]
-    # Jump animation (quick swap)
-    draw_board(board)
-    pygame.display.flip()
-    pygame.time.wait(200)  # Swap duration
-
-def cast_earthquake(board, col):
+def cast_earthquake(board, col, frozen_columns):
     for row in range(ROWS - 1, 0, -1):
         board[row][col] = board[row - 1][col]
     board[0][col] = None
@@ -112,7 +123,7 @@ def cast_earthquake(board, col):
         screen.scroll(dx=random.randint(-5, 5), dy=random.randint(-5, 5))
         pygame.display.flip()
         pygame.time.wait(50)
-    draw_board(board)
+    draw_board(board, frozen_columns)
 
 # Check for a win
 def check_win(board, player):
@@ -140,14 +151,13 @@ def main():
     board = create_board()
     players = ["X", "O"]
     spells = {
-        "X": {"Lightning": 1, "Freeze": 1, "Heal": 1, "Jump": 1, "Earthquake": 1},
-        "O": {"Lightning": 1, "Freeze": 1, "Heal": 1, "Jump": 1, "Earthquake": 1},
+        "X": {"Lightning": 1, "Freeze": 1, "Jump": 1, "Earthquake": 1},
+        "O": {"Lightning": 1, "Freeze": 1, "Jump": 1, "Earthquake": 1},
     }
     frozen_columns = {}  # Track frozen columns and their remaining freeze time
     turn = 0
     running = True
     selected_spell = None  # Track which spell is selected
-    spell_target = None  # Track the target column/row for the selected spell
 
     while running:
         for event in pygame.event.get():
@@ -164,27 +174,20 @@ def main():
                     col = x // GRID_SIZE
                     if col < COLS:
                         if selected_spell is None:  # Drop token
-                            if drop_token_animation(board, col, player):
+                            if drop_token_animation(board, col, player, frozen_columns):
                                 if check_win(board, player):
                                     print(f"Player {player} wins!")
                                     running = False
                                 turn += 1
                         else:  # Use spell
                             if selected_spell == "Lightning":
-                                cast_lightning(board, col)
+                                cast_lightning(board, col, frozen_columns)
                             elif selected_spell == "Freeze":
                                 cast_freeze(board, col, frozen_columns)
-                            elif selected_spell == "Heal":
-                                row = y // GRID_SIZE
-                                cast_heal(board, row, col)
                             elif selected_spell == "Jump":
-                                if spell_target is None:  # First column to swap
-                                    spell_target = col
-                                else:  # Second column to swap
-                                    cast_jump(board, spell_target, col)
-                                    spell_target = None
+                                cast_jump(board, col, frozen_columns)
                             elif selected_spell == "Earthquake":
-                                cast_earthquake(board, col)
+                                cast_earthquake(board, col, frozen_columns)
                             selected_spell = None  # Reset selected spell
                 else:  # Clicked on the spell menu
                     spell_index = (x - 20) // 130
@@ -196,8 +199,15 @@ def main():
                         else:
                             selected_spell = None  # No more uses of this spell
 
-        draw_board(board)
+        # Update frozen columns
+        for col in list(frozen_columns.keys()):
+            frozen_columns[col] -= 1
+            if frozen_columns[col] == 0:
+                del frozen_columns[col]
+
+        draw_board(board, frozen_columns)
         draw_spell_menu(players[turn % 2], spells, selected_spell)
+        draw_turn_indicator(players[turn % 2])  # Display current player's turn
         pygame.display.flip()
         clock.tick(60)
 
