@@ -3,11 +3,13 @@ import random
 import sys
 
 # Constants
-WIDTH, HEIGHT = 700, 600
+WIDTH, HEIGHT = 700, 700  # Increased height for spell menu
 GRID_SIZE = 100
 ROWS, COLS = 6, 7
 PLAYER_COLORS = {"X": (255, 0, 0), "O": (0, 0, 255)}  # Red and Blue
 SPELLS = ["Lightning", "Freeze", "Heal", "Jump", "Earthquake"]
+SPELL_COLORS = {"Lightning": (255, 255, 0), "Freeze": (0, 255, 255), "Heal": (0, 255, 0), 
+                "Jump": (255, 165, 0), "Earthquake": (139, 69, 19)}
 
 # Initialize Pygame
 pygame.init()
@@ -29,6 +31,14 @@ def draw_board(board):
             if board[row][col]:
                 pygame.draw.circle(screen, PLAYER_COLORS[board[row][col]], 
                                  (col * GRID_SIZE + GRID_SIZE // 2, row * GRID_SIZE + GRID_SIZE // 2), GRID_SIZE // 2 - 5)
+
+# Draw spell menu
+def draw_spell_menu(player, spells):
+    y_offset = HEIGHT - 100
+    pygame.draw.rect(screen, (50, 50, 50), (0, y_offset, WIDTH, 100))  # Spell menu background
+    for i, spell in enumerate(SPELLS):
+        spell_text = font.render(f"{spell}: {spells[player][spell]}", True, SPELL_COLORS[spell])
+        screen.blit(spell_text, (20 + i * 130, y_offset + 20))
 
 # Drop token animation
 def drop_token_animation(board, col, player):
@@ -100,6 +110,7 @@ def main():
     frozen_columns = {}  # Track frozen columns and their remaining freeze time
     turn = 0
     running = True
+    selected_spell = None  # Track which spell is selected
 
     while running:
         for event in pygame.event.get():
@@ -110,17 +121,45 @@ def main():
 
             if event.type == pygame.MOUSEBUTTONDOWN:
                 player = players[turn % 2]
-                x, _ = pygame.mouse.get_pos()
-                col = x // GRID_SIZE
+                x, y = pygame.mouse.get_pos()
 
-                if col < COLS:
-                    if drop_token_animation(board, col, player):
-                        if check_win(board, player):
-                            print(f"Player {player} wins!")
-                            running = False
-                        turn += 1
+                if y < HEIGHT - 100:  # Clicked on the board
+                    col = x // GRID_SIZE
+                    if col < COLS:
+                        if drop_token_animation(board, col, player):
+                            if check_win(board, player):
+                                print(f"Player {player} wins!")
+                                running = False
+                            turn += 1
+                else:  # Clicked on the spell menu
+                    spell_index = (x - 20) // 130
+                    if 0 <= spell_index < len(SPELLS):
+                        selected_spell = SPELLS[spell_index]
+                        if spells[player][selected_spell] > 0:
+                            print(f"Player {player} cast {selected_spell}!")
+                            spells[player][selected_spell] -= 1
+                            # Implement spell effects here
+                            if selected_spell == "Lightning":
+                                col = int(input("Choose a column to strike: "))  # Replace with mouse input
+                                cast_lightning(board, col)
+                            elif selected_spell == "Freeze":
+                                col = int(input("Choose a column to freeze: "))  # Replace with mouse input
+                                cast_freeze(board, col, frozen_columns)
+                            elif selected_spell == "Heal":
+                                row = int(input("Choose the row of the token to heal: "))  # Replace with mouse input
+                                col = int(input("Choose the column of the token to heal: "))  # Replace with mouse input
+                                cast_heal(board, row, col)
+                            elif selected_spell == "Jump":
+                                col1 = int(input("Choose the first column to swap: "))  # Replace with mouse input
+                                col2 = int(input("Choose the second column to swap: "))  # Replace with mouse input
+                                cast_jump(board, col1, col2)
+                            elif selected_spell == "Earthquake":
+                                col = int(input("Choose a column to earthquake: "))  # Replace with mouse input
+                                cast_earthquake(board, col)
+                            selected_spell = None  # Reset selected spell
 
         draw_board(board)
+        draw_spell_menu(players[turn % 2], spells)
         pygame.display.flip()
         clock.tick(60)
 
